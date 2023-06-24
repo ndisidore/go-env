@@ -3,7 +3,6 @@ package env
 import (
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -14,36 +13,7 @@ type (
 	Parseable interface {
 		string | bool | int | uint | int64 | uint64 | float64 | time.Duration | []string | []bool | []int | []uint | []int64 | []uint64 | []float64
 	}
-
-	envParseOpts struct {
-		separator      string
-		defaultOnError bool
-	}
-
-	// EnvParseOption is a means to customize parse options via variadic parameters.
-	EnvParseOption func(o *envParseOpts)
 )
-
-var (
-	defaultParseOptions = envParseOpts{
-		separator:      ",",
-		defaultOnError: false,
-	}
-)
-
-// WithEnvParseSeparator allows overriding the separated used to parse arrays/slices of a given type.
-func WithEnvParseSeparator(sep string) EnvParseOption {
-	return func(o *envParseOpts) {
-		o.separator = sep
-	}
-}
-
-// WithFallbackToDefaultOnError informs the parser that if an error is encountered during parsing, it should fallback to the default value.
-func WithFallbackToDefaultOnError(fallback bool) EnvParseOption {
-	return func(o *envParseOpts) {
-		o.defaultOnError = fallback
-	}
-}
 
 // MustFromEnvOrDefault attempts to parse the environment variable provided. If it is empty or missing, the default value is used.
 //
@@ -61,14 +31,16 @@ func MustFromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvP
 //
 // If an error is encountered, depending on whether the `WithFallbackToDefaultOnError` option is provided it will either fallback or return the error back to the client.
 func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParseOption) (dest T, err error) {
-	envStr := os.Getenv(envVar)
-	if envStr == "" {
-		return defaultVal, nil
-	}
-
 	parseOpts := &defaultParseOptions
 	for _, opt := range opts {
-		opt(parseOpts)
+		if err := opt(parseOpts); err != nil {
+			return dest, fmt.Errorf("option error: %w", err)
+		}
+	}
+
+	envStr := parseOpts.envLoader(envVar)
+	if envStr == "" {
+		return defaultVal, nil
 	}
 
 	var (
@@ -78,7 +50,7 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 	case string:
 		v = envStr
 	case bool:
-		v, err = strconv.ParseBool(envVar)
+		v, err = strconv.ParseBool(envStr)
 	case int:
 		v, err = strconv.Atoi(envStr)
 	case uint:
@@ -97,8 +69,8 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 		v = strings.Split(envStr, parseOpts.separator)
 	case []bool:
 		vs := make([]bool, 0)
-		for i, at := range strings.Split(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseBool(at)
+		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+			parsed, innerErr := strconv.ParseBool(strings.TrimSpace(at))
 			if innerErr != nil {
 				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
 				break
@@ -108,8 +80,8 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 		v = vs
 	case []int:
 		vs := make([]int, 0)
-		for i, at := range strings.Split(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.Atoi(envStr)
+		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+			parsed, innerErr := strconv.Atoi(at)
 			if innerErr != nil {
 				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
 				break
@@ -119,8 +91,8 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 		v = vs
 	case []uint:
 		vs := make([]uint, 0)
-		for i, at := range strings.Split(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseUint(envStr, 10, 64)
+		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+			parsed, innerErr := strconv.ParseUint(at, 10, 64)
 			if innerErr != nil {
 				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
 				break
@@ -130,8 +102,8 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 		v = vs
 	case []int64:
 		vs := make([]int64, 0)
-		for i, at := range strings.Split(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseInt(envStr, 10, 64)
+		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+			parsed, innerErr := strconv.ParseInt(at, 10, 64)
 			if innerErr != nil {
 				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
 				break
@@ -141,8 +113,8 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 		v = vs
 	case []uint64:
 		vs := make([]uint64, 0)
-		for i, at := range strings.Split(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseUint(envStr, 10, 64)
+		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+			parsed, innerErr := strconv.ParseUint(at, 10, 64)
 			if innerErr != nil {
 				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
 				break
@@ -152,8 +124,8 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 		v = vs
 	case []float64:
 		vs := make([]float64, 0)
-		for i, at := range strings.Split(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseFloat(envStr, 64)
+		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+			parsed, innerErr := strconv.ParseFloat(at, 64)
 			if innerErr != nil {
 				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
 				break
@@ -175,4 +147,12 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 		return dest, fmt.Errorf("failed to cast env %s (value: %v) to %T", envVar, v, dest)
 	}
 	return dest, nil
+}
+
+func splitAndTrim(in string, sep string) []string {
+	strs := strings.Split(in, sep)
+	for i, str := range strs {
+		strs[i] = strings.TrimSpace(str)
+	}
+	return strs
 }
