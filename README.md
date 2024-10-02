@@ -17,12 +17,14 @@ This aims to bridge that gap. It was created with the intention of allowing envi
 
 ### With flags.
 
-Lets look at the default signature for a flag, here for  `uint64`
+Lets look at the default signature for a flag, here for `uint64`
+
 ```
 func Uint64(name string, value uint64, usage string) *uint64
 ```
 
 With `go-env` we can provide a value for, ahem, `value` that is a type checked env in a single function call (thanks generics!).
+
 ```go
 import (
     "os"
@@ -32,20 +34,22 @@ import (
 )
 
 os.Setenv("FIRST_FLAG_ENV_VAR", "42")
+var ctx = context.Background()
 // since `FIRST_FLAG_ENV_VAR` env is set, this will parse and use that value
-var myFlag1 = flags.Uint64("first-flag-cmd-line", env.MustFromEnvOrDefault("FIRST_FLAG_ENV_VAR", 7), "an example uint64 flag") *uint64
+var myFlag1 = flags.Uint64("first-flag-cmd-line", env.MustFromEnvOrDefault(ctx, "FIRST_FLAG_ENV_VAR", 7), "an example uint64 flag") *uint64
 // since `SECOND_FLAG_ENV_VAR` env is not set, this will fallback to the default value
-var myFlag2 = flags.Uint64("second-flag-cmd-line", env.MustFromEnvOrDefault("SECOND_FLAG_ENV_VAR", 7), "an example uint64 flag") *uint64
+var myFlag2 = flags.Uint64("second-flag-cmd-line", env.MustFromEnvOrDefault(ctx, "SECOND_FLAG_ENV_VAR", 7), "an example uint64 flag") *uint64
 fmt.Printf("%d; %d", *myFlag1, *myFlag2) // outputs -> 42; 7
 ```
 
 Since `MustFromEnvOrDefault` (and its error returning counterpart `FromEnvOrDefault`) use generics and analyze the type dynamically, the call looks very similar for other flag data types.
 
 ```go
-var myStrFlag = flags.String("my-str-flag", env.MustFromEnvOrDefault("MY_STR", "a string"), "an example string flag") *string
-var myBoolFlag = flags.Bool("my-bool-flag", env.MustFromEnvOrDefault("MY_BOOL", true), "an example bool flag") *bool
-var myDurFlag = flags.Duration("my-duration-flag", env.MustFromEnvOrDefault("MY_DURATION", time.Second * 5), "an example duration flag") *time.Duration
-var myFloatFlag = flags.Float64("my-float64-flag", env.MustFromEnvOrDefault("MY_FLOAT64", 7.11), "an example float64 flag") *float64
+var ctx = context.Background()
+var myStrFlag = flags.String("my-str-flag", env.MustFromEnvOrDefault(ctx, "MY_STR", "a string"), "an example string flag") *string
+var myBoolFlag = flags.Bool("my-bool-flag", env.MustFromEnvOrDefault(ctx, "MY_BOOL", true), "an example bool flag") *bool
+var myDurFlag = flags.Duration("my-duration-flag", env.MustFromEnvOrDefault(ctx, "MY_DURATION", time.Second * 5), "an example duration flag") *time.Duration
+var myFloatFlag = flags.Float64("my-float64-flag", env.MustFromEnvOrDefault(ctx, "MY_FLOAT64", 7.11), "an example float64 flag") *float64
 ```
 
 ### Without flags.
@@ -54,14 +58,15 @@ Of course, usage with [flag](https://pkg.go.dev/flag) is not strictly necessary 
 
 ```go
 var (
-    myStrVar  = env.MustFromEnvOrDefault("MY_STR", "a string")
-    myBoolVar = env.MustFromEnvOrDefault("MY_BOOL", true)
+    ctx       = context.Background()
+    myStrVar  = env.MustFromEnvOrDefault(ctx, "MY_STR", "a string")
+    myBoolVar = env.MustFromEnvOrDefault(ctx, "MY_BOOL", true)
 )
 
 // --- or ---
 
-myStrVar2, err := env.FromEnvOrDefault("MY_STR", "a string")
+myStrVar2, err := env.FromEnvOrDefault(ctx, "MY_STR", "a string")
 if err != nil { ... }
-myBoolVar2, err := env.FromEnvOrDefault("MY_BOOL", true)
+myBoolVar2, err := env.FromEnvOrDefault(ctx, "MY_BOOL", true)
 if err != nil { ... }
 ```

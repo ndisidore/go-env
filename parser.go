@@ -1,8 +1,11 @@
 package env
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -11,17 +14,18 @@ import (
 type (
 	// Parseable represents the types the parser is capable of handling.
 	Parseable interface {
-		string | bool | int | uint | int64 | uint64 | float64 | time.Duration | []string | []bool | []int | []uint | []int64 | []uint64 | []float64
+		string | bool | int | uint | int64 | uint64 | float64 | time.Duration | time.Time | url.URL | []string | []bool | []int | []uint | []int64 | []uint64 | []float64 | []time.Duration | []time.Time | []url.URL
 	}
 )
 
 // MustFromEnvOrDefault attempts to parse the environment variable provided. If it is empty or missing, the default value is used.
 //
 // If an error is encountered, depending on whether the `WithFallbackToDefaultOnError` option is provided it will either fallback or fatally log & exit.
-func MustFromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParseOption) (dest T) {
-	parsed, err := FromEnvOrDefault(envVar, defaultVal, opts...)
+func MustFromEnvOrDefault[T Parseable](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) (dest T) {
+	parsed, err := FromEnvOrDefault(ctx, envVar, defaultVal, opts...)
 	if err != nil {
-		log.Fatal(err)
+		slog.Default().ErrorContext(ctx, "failed to parse env var", slog.String("env_var", envVar), slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	return parsed
@@ -30,7 +34,7 @@ func MustFromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvP
 // FromEnvOrDefault attempts to parse the environment variable provided. If it is empty or missing, the default value is used.
 //
 // If an error is encountered, depending on whether the `WithFallbackToDefaultOnError` option is provided it will either fallback or return the error back to the client.
-func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParseOption) (dest T, err error) {
+func FromEnvOrDefault[T Parseable](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) (dest T, err error) {
 	parseOpts := &defaultParseOptions
 	for _, opt := range opts {
 		if err := opt(parseOpts); err != nil {
@@ -65,12 +69,16 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 		v, err = strconv.ParseFloat(envStr, 64)
 	case time.Duration:
 		v, err = time.ParseDuration(envStr)
+	case time.Time:
+		v, err = time.Parse(parseOpts.timeLayout, envStr)
+	case url.URL:
+		v, err = url.Parse(envStr)
 	case []string:
 		v = strings.Split(envStr, parseOpts.separator)
 	case []bool:
 		vs := make([]bool, 0)
 		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseBool(strings.TrimSpace(at))
+			parsed, innerErr := strconv.ParseBool(at)
 			if innerErr != nil {
 				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
 				break
@@ -133,6 +141,39 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 			vs = append(vs, parsed)
 		}
 		v = vs
+	case []time.Duration:
+		vs := make([]time.Duration, 0)
+		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+			parsed, innerErr := time.ParseDuration(at)
+			if innerErr != nil {
+				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+				break
+			}
+			vs = append(vs, parsed)
+		}
+		v = vs
+	case []time.Time:
+		vs := make([]time.Time, 0)
+		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+			parsed, innerErr := time.Parse(parseOpts.timeLayout, at)
+			if innerErr != nil {
+				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+				break
+			}
+			vs = append(vs, parsed)
+		}
+		v = vs
+	case []url.URL:
+		vs := make([]url.URL, 0)
+		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+			parsed, innerErr := url.Parse(at)
+			if innerErr != nil {
+				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+				break
+			}
+			vs = append(vs, *parsed)
+		}
+		v = vs
 	}
 	if err != nil {
 		if parseOpts.defaultOnError {
@@ -144,7 +185,7 @@ func FromEnvOrDefault[T Parseable](envVar string, defaultVal T, opts ...EnvParse
 
 	dest, ok := v.(T)
 	if !ok {
-		return dest, fmt.Errorf("failed to cast env %s (value: %v) to %T", envVar, v, dest)
+		return dest, fmt.Errorf("failed to cast env %s to %T", envVar, dest)
 	}
 	return dest, nil
 }

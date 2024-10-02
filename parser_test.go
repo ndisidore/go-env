@@ -1,6 +1,7 @@
 package env_test
 
 import (
+	"context"
 	"math/rand"
 	"reflect"
 	"strings"
@@ -35,7 +36,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				if err != nil {
 					t.Logf("unexpected error: %v", err)
 					t.Fail()
@@ -65,7 +66,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -100,7 +101,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -135,7 +136,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -170,7 +171,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -205,7 +206,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -240,7 +241,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -275,7 +276,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -287,6 +288,43 @@ func TestParsesParseable(t *testing.T) {
 					t.Fail()
 				case ret != tt.expected:
 					t.Logf("return value (%s) does not match expected (%s)", ret, tt.expected)
+					t.Fail()
+				}
+			})
+		}
+	})
+
+	t.Run("time.Time", func(t *testing.T) {
+		t.Parallel()
+		var (
+			defaultVal = time.Date(2021, time.January, 1, 0, 0, 0, 0, time.UTC)
+			loader     = makeLoader(map[string]string{"KNOWN_TIME": "2021-01-01T00:00:00Z", "NOT_TIME": "abcd"})
+			cases      = []struct {
+				searchEnv           string
+				expected            time.Time
+				expectedErrContains string
+				options             []env.EnvParseOption
+			}{
+				{searchEnv: "KNOWN_TIME", expected: time.Date(2021, time.January, 1, 0, 0, 0, 0, time.UTC)},
+				{searchEnv: "KNOWN_TIME", expectedErrContains: "parsing time", options: []env.EnvParseOption{env.WithTimeLayout(time.RFC1123)}},
+				{searchEnv: "UNKNOWN_ENV", expected: defaultVal},
+				{searchEnv: "NOT_TIME", expectedErrContains: "parsing time"},
+			}
+		)
+		for _, tt := range cases {
+			t.Run("", func(t *testing.T) {
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, append(tt.options, env.WithEnvLoader(loader))...)
+				switch {
+				case err != nil && tt.expectedErrContains != "":
+					if !strings.Contains(err.Error(), tt.expectedErrContains) {
+						t.Logf("unexpected error: %v", err)
+						t.Fail()
+					}
+				case err != nil:
+					t.Logf("unexpected error: %v", err)
+					t.Fail()
+				case !ret.Equal(tt.expected):
+					t.Logf("return value (%v) does not match expected (%v)", ret, tt.expected)
 					t.Fail()
 				}
 			})
@@ -310,7 +348,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil:
 					t.Logf("unexpected error: %v", err)
@@ -340,7 +378,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -375,7 +413,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -410,7 +448,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -445,7 +483,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -480,7 +518,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
@@ -515,7 +553,7 @@ func TestParsesParseable(t *testing.T) {
 		)
 		for _, tt := range cases {
 			t.Run("", func(t *testing.T) {
-				ret, err := env.FromEnvOrDefault(tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
+				ret, err := env.FromEnvOrDefault(context.Background(), tt.searchEnv, defaultVal, env.WithEnvLoader(loader))
 				switch {
 				case err != nil && tt.expectedErrContains != "":
 					if !strings.Contains(err.Error(), tt.expectedErrContains) {
