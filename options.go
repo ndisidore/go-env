@@ -3,6 +3,7 @@ package env
 import (
 	"errors"
 	"os"
+	"time"
 )
 
 type (
@@ -10,6 +11,8 @@ type (
 		envLoader      EnvLoader
 		separator      string
 		defaultOnError bool
+		timeLayout     string
+		sensitive      bool
 	}
 
 	// EnvLoader is an alias for a function that loads values from the env. It mirrors the signature of os.Getenv.
@@ -24,6 +27,7 @@ var (
 		envLoader:      os.Getenv,
 		separator:      ",",
 		defaultOnError: false,
+		timeLayout:     time.RFC3339,
 	}
 )
 
@@ -57,6 +61,26 @@ func WithEnvParseSeparator(sep string) EnvParseOption {
 func WithFallbackToDefaultOnError(fallback bool) EnvParseOption {
 	return func(o *envParseOpts) error {
 		o.defaultOnError = fallback
+		return nil
+	}
+}
+
+// WithTimeLayout allows overriding the time layout used to parse time.Time values. Default is RFC3339.
+func WithTimeLayout(layout string) EnvParseOption {
+	return func(o *envParseOpts) error {
+		if layout == "" {
+			return errors.New("time layout cannot be empty string")
+		}
+
+		o.timeLayout = layout
+		return nil
+	}
+}
+
+// WithSensitive informs the parser that the value being parsed is sensitive and should not be logged.
+func WithSensitive(sensitive bool) EnvParseOption {
+	return func(o *envParseOpts) error {
+		o.sensitive = sensitive
 		return nil
 	}
 }
