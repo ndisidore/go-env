@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 type (
 	// Parseable represents the types the parser is capable of handling.
+	// This includes built-in types and any type that can be handled by custom marshallers.
 	Parseable interface {
 		string | bool | int | uint | int64 | uint64 | float64 | time.Duration | time.Time | url.URL | []string | []bool | []int | []uint | []int64 | []uint64 | []float64 | []time.Duration | []time.Time | []url.URL
 	}
@@ -21,7 +23,7 @@ type (
 // MustFromEnvOrDefault attempts to parse the environment variable provided. If it is empty or missing, the default value is used.
 //
 // If an error is encountered, depending on whether the `WithFallbackToDefaultOnError` option is provided it will either fallback or fatally log & exit.
-func MustFromEnvOrDefault[T Parseable](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) (dest T) {
+func MustFromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) (dest T) {
 	parsed, err := FromEnvOrDefault(ctx, envVar, defaultVal, opts...)
 	if err != nil {
 		slog.Default().ErrorContext(ctx, "failed to parse env var", slog.String("env_var", envVar), slog.String("error", err.Error()))
@@ -34,10 +36,18 @@ func MustFromEnvOrDefault[T Parseable](ctx context.Context, envVar string, defau
 // FromEnvOrDefault attempts to parse the environment variable provided. If it is empty or missing, the default value is used.
 //
 // If an error is encountered, depending on whether the `WithFallbackToDefaultOnError` option is provided it will either fallback or return the error back to the client.
-func FromEnvOrDefault[T Parseable](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) (dest T, err error) {
-	parseOpts := &defaultParseOptions
+func FromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) (dest T, err error) {
+	parseOpts := defaultParseOptions
+	// Create a copy of the custom marshallers map to avoid modifying the global state
+	if parseOpts.customMarshallers != nil {
+		parseOpts.customMarshallers = make(map[reflect.Type]CustomMarshaller)
+		for k, v := range defaultParseOptions.customMarshallers {
+			parseOpts.customMarshallers[k] = v
+		}
+	}
+	
 	for _, opt := range opts {
-		if err := opt(parseOpts); err != nil {
+		if err := opt(&parseOpts); err != nil {
 			return dest, fmt.Errorf("option error: %w", err)
 		}
 	}
@@ -50,7 +60,20 @@ func FromEnvOrDefault[T Parseable](ctx context.Context, envVar string, defaultVa
 	var (
 		v any
 	)
-	switch any(dest).(type) {
+	
+	// Check for custom marshaller first
+	destType := reflect.TypeOf(dest)
+	if marshaller, exists := parseOpts.customMarshallers[destType]; exists {
+		v, err = marshaller.UnmarshalEnv(envStr)
+		if err != nil {
+			if parseOpts.defaultOnError {
+				return defaultVal, nil
+			}
+			return dest, fmt.Errorf("custom marshaller failed for env %s to %T: %w", envVar, dest, err)
+		}
+	} else {
+		// Fall back to built-in type handling
+		switch any(dest).(type) {
 	case string:
 		v = envStr
 	case bool:
@@ -174,7 +197,12 @@ func FromEnvOrDefault[T Parseable](ctx context.Context, envVar string, defaultVa
 			vs = append(vs, *parsed)
 		}
 		v = vs
+		default:
+			// If no built-in type matches and no custom marshaller, return error
+			return dest, fmt.Errorf("unsupported type %T for env var %s", dest, envVar)
+		}
 	}
+
 	if err != nil {
 		if parseOpts.defaultOnError {
 			return defaultVal, nil

@@ -1,72 +1,326 @@
 # go-env
 
-A minimal way to load typed data into a golang application from a system's environment utilizing generics.
+A minimal, type-safe library for loading configuration from environment variables using Go generics.
 
-## Why?
+## Why go-env?
 
-There are some excellent, mature systems for loading config in the golang ecosystem such as [cobra](https://cobra.dev/) and [urfave/cli](https://cli.urfave.org/).
-These come with all kinds of fancy bells and whistles and the author can attest to them having used them in many applications with great success.
-
-However, these do come with some extra weight (in the form of dependencies) and syntactic lock in. Often times, just using a simple [flag](https://pkg.go.dev/flag)
-is the desired option. The ergonomics of flag begin to struggle where loading from env with a default value is involved, and one ends up having to write a custom
-function for each type and can become a bit verbose where non-strings are involved.
+There are some excellent, mature systems for loading config in the golang ecosystem such as [cobra](https://cobra.dev/) and [urfave/cli](https://cli.urfave.org/). However, these do come with some extra weight (in the form of dependencies) and syntactic lock in. A simple [flag](https://pkg.go.dev/flag) is often more then suffient for a wide swath of applications. The ergonomics of flag begin to break down where loading from env with a default value is involved, and one ends up having to write a custom function for each type and can become a bit verbose where non-strings are involved.
 
 This aims to bridge that gap. It was created with the intention of allowing environment and type variables to be used in parallel to configure an app.
 
-## How.
+### Features
 
-### With flags.
+- **Minimal**: Zero dependencies, small API surface
+- **Type-safe**: Compile-time type checking with generics
+- **Flexible**: Support for any custom type
+- **Testable**: Easy to mock and test
+- **Ergonomic**: Clean, readable code
+- **Production-ready**: Used in production applications
 
-Lets look at the default signature for a flag, here for `uint64`
+Perfect for applications that need simple, reliable environment variable parsing without the overhead of larger configuration frameworks.
 
+
+## Installation
+
+```bash
+go get github.com/ndisidore/go-env
 ```
-func Uint64(name string, value uint64, usage string) *uint64
-```
 
-With `go-env` we can provide a value for, ahem, `value` that is a type checked env in a single function call (thanks generics!).
+## Quick Start
 
 ```go
+package main
+
 import (
-    "os"
-    "flags"
+    "context"
+    "fmt"
+    "time"
 
     "github.com/ndisidore/go-env"
 )
 
-os.Setenv("FIRST_FLAG_ENV_VAR", "42")
-var ctx = context.Background()
-// since `FIRST_FLAG_ENV_VAR` env is set, this will parse and use that value
-var myFlag1 = flags.Uint64("first-flag-cmd-line", env.MustFromEnvOrDefault(ctx, "FIRST_FLAG_ENV_VAR", 7), "an example uint64 flag") *uint64
-// since `SECOND_FLAG_ENV_VAR` env is not set, this will fallback to the default value
-var myFlag2 = flags.Uint64("second-flag-cmd-line", env.MustFromEnvOrDefault(ctx, "SECOND_FLAG_ENV_VAR", 7), "an example uint64 flag") *uint64
-fmt.Printf("%d; %d", *myFlag1, *myFlag2) // outputs -> 42; 7
+func main() {
+    ctx := context.Background()
+
+    // Basic usage with defaults
+    port := env.MustFromEnvOrDefault(ctx, "PORT", 8080)
+    debug := env.MustFromEnvOrDefault(ctx, "DEBUG", false)
+    timeout := env.MustFromEnvOrDefault(ctx, "TIMEOUT", 30*time.Second)
+
+    fmt.Printf("Port: %d, Debug: %t, Timeout: %v\n", port, debug, timeout)
+}
 ```
 
-Since `MustFromEnvOrDefault` (and its error returning counterpart `FromEnvOrDefault`) use generics and analyze the type dynamically, the call looks very similar for other flag data types.
+## Basic Usage
+
+### Simple Types
 
 ```go
-var ctx = context.Background()
-var myStrFlag = flags.String("my-str-flag", env.MustFromEnvOrDefault(ctx, "MY_STR", "a string"), "an example string flag") *string
-var myBoolFlag = flags.Bool("my-bool-flag", env.MustFromEnvOrDefault(ctx, "MY_BOOL", true), "an example bool flag") *bool
-var myDurFlag = flags.Duration("my-duration-flag", env.MustFromEnvOrDefault(ctx, "MY_DURATION", time.Second * 5), "an example duration flag") *time.Duration
-var myFloatFlag = flags.Float64("my-float64-flag", env.MustFromEnvOrDefault(ctx, "MY_FLOAT64", 7.11), "an example float64 flag") *float64
+ctx := context.Background()
+
+// String
+name := env.MustFromEnvOrDefault(ctx, "APP_NAME", "myapp")
+
+// Numbers
+port := env.MustFromEnvOrDefault(ctx, "PORT", 8080)
+maxSize := env.MustFromEnvOrDefault(ctx, "MAX_SIZE", int64(1024))
+ratio := env.MustFromEnvOrDefault(ctx, "RATIO", 0.75)
+
+// Boolean
+debug := env.MustFromEnvOrDefault(ctx, "DEBUG", false)
+
+// Duration and Time
+timeout := env.MustFromEnvOrDefault(ctx, "TIMEOUT", 30*time.Second)
+startTime := env.MustFromEnvOrDefault(ctx, "START_TIME", time.Now())
 ```
 
-### Without flags.
-
-Of course, usage with [flag](https://pkg.go.dev/flag) is not strictly necessary here. If one doesn't require cli flag support and just needs to load from env, that can be done directly.
+### Arrays and Slices
 
 ```go
-var (
-    ctx       = context.Background()
-    myStrVar  = env.MustFromEnvOrDefault(ctx, "MY_STR", "a string")
-    myBoolVar = env.MustFromEnvOrDefault(ctx, "MY_BOOL", true)
+// Comma-separated values (default separator)
+hosts := env.MustFromEnvOrDefault(ctx, "HOSTS", []string{"localhost"})
+// HOSTS=api.example.com,db.example.com -> ["api.example.com", "db.example.com"]
+
+ports := env.MustFromEnvOrDefault(ctx, "PORTS", []int{8080})
+// PORTS=8080,8081,8082 -> [8080, 8081, 8082]
+
+// Custom separator
+tags := env.MustFromEnvOrDefault(ctx, "TAGS", []string{"default"}, 
+    env.WithEnvParseSeparator("|"))
+// TAGS=web|api|database -> ["web", "api", "database"]
+```
+
+### Error Handling
+
+```go
+// With error handling
+config, err := env.FromEnvOrDefault(ctx, "CONFIG_FILE", "config.json")
+if err != nil {
+    log.Fatal(err)
+}
+
+// Fallback to default on parse error
+port := env.MustFromEnvOrDefault(ctx, "PORT", 8080, 
+    env.WithFallbackToDefaultOnError(true))
+```
+
+## Advanced Usage
+
+### Custom Types
+
+Extend the parser to support any custom type using marshallers:
+
+```go
+// Custom type
+type DatabaseURL struct {
+    Host     string
+    Port     int
+    Database string
+    SSL      bool
+}
+
+// Custom parser function
+func parseDBURL(value string) (DatabaseURL, error) {
+    // Parse connection string: "host:port/db?ssl=true"
+    // Implementation details...
+    return DatabaseURL{}, nil
+}
+
+// Usage
+dbURL := env.MustFromEnvOrDefault(ctx, "DATABASE_URL", DatabaseURL{}, 
+    env.WithCustomMarshallerFunc[DatabaseURL](parseDBURL))
+```
+
+### JSON Configuration
+
+```go
+type Config struct {
+    Database struct {
+        Host string `json:"host"`
+        Port int    `json:"port"`
+    } `json:"database"`
+    Redis struct {
+        URL string `json:"url"`
+    } `json:"redis"`
+}
+
+func parseJSONConfig(value string) (Config, error) {
+    var config Config
+    err := json.Unmarshal([]byte(value), &config)
+    return config, err
+}
+
+// Usage
+config := env.MustFromEnvOrDefault(ctx, "APP_CONFIG", Config{}, 
+    env.WithCustomMarshallerFunc[Config](parseJSONConfig))
+```
+
+### Enums and Constants
+
+```go
+type LogLevel int
+
+const (
+    Debug LogLevel = iota
+    Info
+    Warn
+    Error
 )
 
-// --- or ---
+func parseLogLevel(value string) (LogLevel, error) {
+    switch strings.ToLower(value) {
+    case "debug": return Debug, nil
+    case "info":  return Info, nil
+    case "warn":  return Warn, nil
+    case "error": return Error, nil
+    default:
+        return Info, fmt.Errorf("invalid log level: %s", value)
+    }
+}
 
-myStrVar2, err := env.FromEnvOrDefault(ctx, "MY_STR", "a string")
-if err != nil { ... }
-myBoolVar2, err := env.FromEnvOrDefault(ctx, "MY_BOOL", true)
-if err != nil { ... }
+logLevel := env.MustFromEnvOrDefault(ctx, "LOG_LEVEL", Info, 
+    env.WithCustomMarshallerFunc[LogLevel](parseLogLevel))
+```
+
+## Integration Examples
+
+### With Standard Library Flags
+
+```go
+import (
+    "flag"
+    "github.com/ndisidore/go-env"
+)
+
+var (
+    port = flag.Int("port", env.MustFromEnvOrDefault(ctx, "PORT", 8080), "server port")
+    host = flag.String("host", env.MustFromEnvOrDefault(ctx, "HOST", "localhost"), "server host")
+)
+```
+
+### Application Configuration
+
+```go
+type AppConfig struct {
+    Port        int
+    Host        string
+    DatabaseURL string
+    Debug       bool
+    Timeout     time.Duration
+}
+
+func LoadConfig() AppConfig {
+    ctx := context.Background()
+    
+    return AppConfig{
+        Port:        env.MustFromEnvOrDefault(ctx, "PORT", 8080),
+        Host:        env.MustFromEnvOrDefault(ctx, "HOST", "localhost"),
+        DatabaseURL: env.MustFromEnvOrDefault(ctx, "DATABASE_URL", "postgres://localhost/myapp"),
+        Debug:       env.MustFromEnvOrDefault(ctx, "DEBUG", false),
+        Timeout:     env.MustFromEnvOrDefault(ctx, "TIMEOUT", 30*time.Second),
+    }
+}
+```
+
+## Configuration Options
+
+All functions accept optional configuration parameters:
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithEnvLoader(loader)` | Override environment variable loading | `os.Getenv` |
+| `WithEnvParseSeparator(sep)` | Array/slice separator | `","` |
+| `WithFallbackToDefaultOnError(bool)` | Return default on parse error | `false` |
+| `WithTimeLayout(layout)` | Time parsing format | `time.RFC3339` |
+| `WithSensitive(bool)` | Mark value as sensitive for logging | `false` |
+| `WithCustomMarshaller[T](marshaller)` | Register custom type marshaller | - |
+| `WithCustomMarshallerFunc[T](func)` | Register custom parser function | - |
+
+### Examples with Options
+
+```go
+// Custom separator for arrays
+hosts := env.MustFromEnvOrDefault(ctx, "HOSTS", []string{}, 
+    env.WithEnvParseSeparator(";"))
+
+// Graceful error handling
+timeout := env.MustFromEnvOrDefault(ctx, "TIMEOUT", 30*time.Second,
+    env.WithFallbackToDefaultOnError(true))
+
+// Custom time format
+startTime := env.MustFromEnvOrDefault(ctx, "START_TIME", time.Now(),
+    env.WithTimeLayout("2006-01-02 15:04:05"))
+
+// Multiple options
+config := env.MustFromEnvOrDefault(ctx, "DATABASE_CONFIG", defaultConfig,
+    env.WithCustomMarshallerFunc[DatabaseConfig](parseDBConfig),
+    env.WithFallbackToDefaultOnError(true),
+    env.WithSensitive(true))
+```
+
+## Testing
+
+The library is designed to be testable by allowing you to override the environment loader:
+
+```go
+func TestConfig(t *testing.T) {
+    // Create a mock environment
+    mockEnv := map[string]string{
+        "PORT":  "9000",
+        "DEBUG": "true",
+        "HOSTS": "api.test.com,db.test.com",
+    }
+    
+    loader := func(key string) string {
+        return mockEnv[key]
+    }
+    
+    ctx := context.Background()
+    
+    // Test with mock environment
+    port := env.MustFromEnvOrDefault(ctx, "PORT", 8080, 
+        env.WithEnvLoader(loader))
+    
+    assert.Equal(t, 9000, port)
+    
+    hosts := env.MustFromEnvOrDefault(ctx, "HOSTS", []string{}, 
+        env.WithEnvLoader(loader))
+    
+    assert.Equal(t, []string{"api.test.com", "db.test.com"}, hosts)
+}
+```
+
+## Supported Types
+
+### Built-in Types
+- `string`
+- `bool` 
+- `int`, `uint`, `int64`, `uint64`
+- `float64`
+- `time.Duration`
+- `time.Time`
+- `url.URL`
+- Slices of all above types: `[]string`, `[]int`, etc.
+
+### Custom Types
+Any type can be supported by implementing a custom marshaller function or interface.
+
+## API Reference
+
+### Core Functions
+
+```go
+// Parse with error handling
+func FromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) (T, error)
+
+// Parse with panic on error  
+func MustFromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) T
+```
+
+### Custom Marshaller Interface
+
+```go
+type CustomMarshaller interface {
+    UnmarshalEnv(value string) (any, error)
+}
 ```

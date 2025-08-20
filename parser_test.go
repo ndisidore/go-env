@@ -2,8 +2,13 @@ package env_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"math/rand"
+	"net"
+	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -570,4 +575,218 @@ func TestParsesParseable(t *testing.T) {
 			})
 		}
 	})
+}
+
+// Custom types for testing custom marshallers
+type IPAddress net.IP
+
+type Config struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
+type LogLevel int
+
+const (
+	LogLevelDebug LogLevel = iota
+	LogLevelInfo
+	LogLevelWarn
+	LogLevelError
+)
+
+func (l LogLevel) String() string {
+	switch l {
+	case LogLevelDebug:
+		return "debug"
+	case LogLevelInfo:
+		return "info"
+	case LogLevelWarn:
+		return "warn"
+	case LogLevelError:
+		return "error"
+	default:
+		return "unknown"
+	}
+}
+
+// Custom marshaller implementations
+func parseIPAddress(value string) (IPAddress, error) {
+	ip := net.ParseIP(value)
+	if ip == nil {
+		return nil, fmt.Errorf("invalid IP address: %s", value)
+	}
+	return IPAddress(ip), nil
+}
+
+func parseConfig(value string) (Config, error) {
+	var config Config
+	if err := json.Unmarshal([]byte(value), &config); err != nil {
+		return Config{}, fmt.Errorf("failed to parse config JSON: %w", err)
+	}
+	return config, nil
+}
+
+func parseLogLevel(value string) (LogLevel, error) {
+	switch strings.ToLower(value) {
+	case "debug":
+		return LogLevelDebug, nil
+	case "info":
+		return LogLevelInfo, nil
+	case "warn":
+		return LogLevelWarn, nil
+	case "error":
+		return LogLevelError, nil
+	default:
+		if level, err := strconv.Atoi(value); err == nil && level >= 0 && level <= 3 {
+			return LogLevel(level), nil
+		}
+		return LogLevelError, fmt.Errorf("invalid log level: %s", value)
+	}
+}
+
+// Custom marshaller for testing interface-based marshalling
+type customMarshaller struct{}
+
+func (cm customMarshaller) UnmarshalEnv(value string) (any, error) {
+	return parseIPAddress(value)
+}
+
+// JSON marshaller for testing JSON config parsing
+type jsonMarshaller struct{}
+
+func (jm jsonMarshaller) UnmarshalEnv(value string) (any, error) {
+	var config Config
+	err := json.Unmarshal([]byte(value), &config)
+	return config, err
+}
+
+func TestCustomMarshallerFunc(t *testing.T) {
+	ctx := context.Background()
+	
+	// Test IP address parsing
+	os.Setenv("TEST_IP", "192.168.1.1")
+	defer os.Unsetenv("TEST_IP")
+	
+	ip, err := env.FromEnvOrDefault(ctx, "TEST_IP", IPAddress(nil), 
+		env.WithCustomMarshallerFunc[IPAddress](parseIPAddress))
+	
+	if err != nil {
+		t.Fatalf("Failed to parse IP address: %v", err)
+	}
+	
+	expected := net.ParseIP("192.168.1.1")
+	if !net.IP(ip).Equal(expected) {
+		t.Errorf("Expected IP %v, got %v", expected, net.IP(ip))
+	}
+}
+
+func TestCustomMarshallerJSON(t *testing.T) {
+	ctx := context.Background()
+	
+	// Test JSON config parsing
+	os.Setenv("TEST_CONFIG", `{"host":"localhost","port":8080}`)
+	defer os.Unsetenv("TEST_CONFIG")
+	
+	config, err := env.FromEnvOrDefault(ctx, "TEST_CONFIG", Config{}, 
+		env.WithCustomMarshallerFunc[Config](parseConfig))
+	
+	if err != nil {
+		t.Fatalf("Failed to parse config: %v", err)
+	}
+	
+	if config.Host != "localhost" || config.Port != 8080 {
+		t.Errorf("Expected config {localhost 8080}, got %+v", config)
+	}
+}
+
+func TestCustomMarshallerEnum(t *testing.T) {
+	ctx := context.Background()
+	
+	// Test enum parsing by string
+	os.Setenv("TEST_LOG_LEVEL", "warn")
+	defer os.Unsetenv("TEST_LOG_LEVEL")
+	
+	level, err := env.FromEnvOrDefault(ctx, "TEST_LOG_LEVEL", LogLevelInfo, 
+		env.WithCustomMarshallerFunc[LogLevel](parseLogLevel))
+	
+	if err != nil {
+		t.Fatalf("Failed to parse log level: %v", err)
+	}
+	
+	if level != LogLevelWarn {
+		t.Errorf("Expected log level %v, got %v", LogLevelWarn, level)
+	}
+	
+	// Test enum parsing by number
+	os.Setenv("TEST_LOG_LEVEL", "3")
+	
+	level, err = env.FromEnvOrDefault(ctx, "TEST_LOG_LEVEL", LogLevelInfo, 
+		env.WithCustomMarshallerFunc[LogLevel](parseLogLevel))
+	
+	if err != nil {
+		t.Fatalf("Failed to parse log level: %v", err)
+	}
+	
+	if level != LogLevelError {
+		t.Errorf("Expected log level %v, got %v", LogLevelError, level)
+	}
+}
+
+func TestCustomMarshallerInterface(t *testing.T) {
+	ctx := context.Background()
+	
+	os.Setenv("TEST_IP_INTERFACE", "10.0.0.1")
+	defer os.Unsetenv("TEST_IP_INTERFACE")
+	
+	ip, err := env.FromEnvOrDefault(ctx, "TEST_IP_INTERFACE", IPAddress(nil), 
+		env.WithCustomMarshaller[IPAddress](customMarshaller{}))
+	
+	if err != nil {
+		t.Fatalf("Failed to parse IP address with interface: %v", err)
+	}
+	
+	expected := net.ParseIP("10.0.0.1")
+	if !net.IP(ip).Equal(expected) {
+		t.Errorf("Expected IP %v, got %v", expected, net.IP(ip))
+	}
+}
+
+func TestCustomMarshallerError(t *testing.T) {
+	ctx := context.Background()
+	
+	// Test error handling
+	os.Setenv("TEST_INVALID_IP", "not-an-ip")
+	defer os.Unsetenv("TEST_INVALID_IP")
+	
+	_, err := env.FromEnvOrDefault(ctx, "TEST_INVALID_IP", IPAddress(nil), 
+		env.WithCustomMarshallerFunc[IPAddress](parseIPAddress))
+	
+	if err == nil {
+		t.Fatal("Expected error for invalid IP address")
+	}
+	
+	if !strings.Contains(err.Error(), "invalid IP address") {
+		t.Errorf("Expected error to contain 'invalid IP address', got: %v", err)
+	}
+}
+
+func TestCustomMarshallerFallback(t *testing.T) {
+	ctx := context.Background()
+	
+	// Test fallback to default on error
+	os.Setenv("TEST_INVALID_IP_FALLBACK", "not-an-ip")
+	defer os.Unsetenv("TEST_INVALID_IP_FALLBACK")
+	
+	defaultIP := IPAddress(net.ParseIP("127.0.0.1"))
+	ip, err := env.FromEnvOrDefault(ctx, "TEST_INVALID_IP_FALLBACK", defaultIP, 
+		env.WithCustomMarshallerFunc[IPAddress](parseIPAddress),
+		env.WithFallbackToDefaultOnError(true))
+	
+	if err != nil {
+		t.Fatalf("Expected no error with fallback enabled, got: %v", err)
+	}
+	
+	if !net.IP(ip).Equal(net.ParseIP("127.0.0.1")) {
+		t.Errorf("Expected fallback to default IP 127.0.0.1, got %v", net.IP(ip))
+	}
 }
