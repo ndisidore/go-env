@@ -26,7 +26,7 @@ type (
 	}
 
 	// CustomMarshallerFunc is a function type that implements CustomMarshaller.
-CustomMarshallerFunc func(value string) (any, error)
+	CustomMarshallerFunc func(value string) (any, error)
 
 	// EnvParseOption is a means to customize parse options via variadic parameters.
 	EnvParseOption func(o *envParseOpts) error
@@ -107,7 +107,7 @@ func WithCustomMarshaller[T any](marshaller CustomMarshaller) EnvParseOption {
 		if marshaller == nil {
 			return errors.New("custom marshaller cannot be nil")
 		}
-		
+
 		var zero T
 		typ := reflect.TypeOf(zero)
 		if o.customMarshallers == nil {

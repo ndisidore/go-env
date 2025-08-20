@@ -19,7 +19,6 @@ This aims to bridge that gap. It was created with the intention of allowing envi
 
 Perfect for applications that need simple, reliable environment variable parsing without the overhead of larger configuration frameworks.
 
-
 ## Installation
 
 ```bash
@@ -53,6 +52,21 @@ func main() {
 
 ## Basic Usage
 
+### Flavors
+
+`go-env` offers two flavors of environment parsing:
+
+- `FromEnvOrDefault`: returns errors for later handling
+- `MustFromEnvOrDefault`: masks errors, either by panic'ing (default) or falling back to default if used with the `WithFallbackToDefaultOnError(true)` option.
+
+```go
+// Parse with error handling
+func FromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) (T, error)
+
+// Parse with panic on error
+func MustFromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) T
+```
+
 ### Simple Types
 
 ```go
@@ -85,7 +99,7 @@ ports := env.MustFromEnvOrDefault(ctx, "PORTS", []int{8080})
 // PORTS=8080,8081,8082 -> [8080, 8081, 8082]
 
 // Custom separator
-tags := env.MustFromEnvOrDefault(ctx, "TAGS", []string{"default"}, 
+tags := env.MustFromEnvOrDefault(ctx, "TAGS", []string{"default"},
     env.WithEnvParseSeparator("|"))
 // TAGS=web|api|database -> ["web", "api", "database"]
 ```
@@ -100,7 +114,7 @@ if err != nil {
 }
 
 // Fallback to default on parse error
-port := env.MustFromEnvOrDefault(ctx, "PORT", 8080, 
+port := env.MustFromEnvOrDefault(ctx, "PORT", 8080,
     env.WithFallbackToDefaultOnError(true))
 ```
 
@@ -127,7 +141,7 @@ func parseDBURL(value string) (DatabaseURL, error) {
 }
 
 // Usage
-dbURL := env.MustFromEnvOrDefault(ctx, "DATABASE_URL", DatabaseURL{}, 
+dbURL := env.MustFromEnvOrDefault(ctx, "DATABASE_URL", DatabaseURL{},
     env.WithCustomMarshallerFunc[DatabaseURL](parseDBURL))
 ```
 
@@ -151,7 +165,7 @@ func parseJSONConfig(value string) (Config, error) {
 }
 
 // Usage
-config := env.MustFromEnvOrDefault(ctx, "APP_CONFIG", Config{}, 
+config := env.MustFromEnvOrDefault(ctx, "APP_CONFIG", Config{},
     env.WithCustomMarshallerFunc[Config](parseJSONConfig))
 ```
 
@@ -178,7 +192,7 @@ func parseLogLevel(value string) (LogLevel, error) {
     }
 }
 
-logLevel := env.MustFromEnvOrDefault(ctx, "LOG_LEVEL", Info, 
+logLevel := env.MustFromEnvOrDefault(ctx, "LOG_LEVEL", Info,
     env.WithCustomMarshallerFunc[LogLevel](parseLogLevel))
 ```
 
@@ -211,7 +225,7 @@ type AppConfig struct {
 
 func LoadConfig() AppConfig {
     ctx := context.Background()
-    
+
     return AppConfig{
         Port:        env.MustFromEnvOrDefault(ctx, "PORT", 8080),
         Host:        env.MustFromEnvOrDefault(ctx, "HOST", "localhost"),
@@ -226,21 +240,21 @@ func LoadConfig() AppConfig {
 
 All functions accept optional configuration parameters:
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `WithEnvLoader(loader)` | Override environment variable loading | `os.Getenv` |
-| `WithEnvParseSeparator(sep)` | Array/slice separator | `","` |
-| `WithFallbackToDefaultOnError(bool)` | Return default on parse error | `false` |
-| `WithTimeLayout(layout)` | Time parsing format | `time.RFC3339` |
-| `WithSensitive(bool)` | Mark value as sensitive for logging | `false` |
-| `WithCustomMarshaller[T](marshaller)` | Register custom type marshaller | - |
-| `WithCustomMarshallerFunc[T](func)` | Register custom parser function | - |
+| Option                                | Description                           | Default        |
+| ------------------------------------- | ------------------------------------- | -------------- |
+| `WithEnvLoader(loader)`               | Override environment variable loading | `os.Getenv`    |
+| `WithEnvParseSeparator(sep)`          | Array/slice separator                 | `","`          |
+| `WithFallbackToDefaultOnError(bool)`  | Return default on parse error         | `false`        |
+| `WithTimeLayout(layout)`              | Time parsing format                   | `time.RFC3339` |
+| `WithSensitive(bool)`                 | Mark value as sensitive for logging   | `false`        |
+| `WithCustomMarshaller[T](marshaller)` | Register custom type marshaller       | -              |
+| `WithCustomMarshallerFunc[T](func)`   | Register custom parser function       | -              |
 
 ### Examples with Options
 
 ```go
 // Custom separator for arrays
-hosts := env.MustFromEnvOrDefault(ctx, "HOSTS", []string{}, 
+hosts := env.MustFromEnvOrDefault(ctx, "HOSTS", []string{},
     env.WithEnvParseSeparator(";"))
 
 // Graceful error handling
@@ -270,22 +284,22 @@ func TestConfig(t *testing.T) {
         "DEBUG": "true",
         "HOSTS": "api.test.com,db.test.com",
     }
-    
+
     loader := func(key string) string {
         return mockEnv[key]
     }
-    
+
     ctx := context.Background()
-    
+
     // Test with mock environment
-    port := env.MustFromEnvOrDefault(ctx, "PORT", 8080, 
+    port := env.MustFromEnvOrDefault(ctx, "PORT", 8080,
         env.WithEnvLoader(loader))
-    
+
     assert.Equal(t, 9000, port)
-    
-    hosts := env.MustFromEnvOrDefault(ctx, "HOSTS", []string{}, 
+
+    hosts := env.MustFromEnvOrDefault(ctx, "HOSTS", []string{},
         env.WithEnvLoader(loader))
-    
+
     assert.Equal(t, []string{"api.test.com", "db.test.com"}, hosts)
 }
 ```
@@ -293,8 +307,9 @@ func TestConfig(t *testing.T) {
 ## Supported Types
 
 ### Built-in Types
+
 - `string`
-- `bool` 
+- `bool`
 - `int`, `uint`, `int64`, `uint64`
 - `float64`
 - `time.Duration`
@@ -303,19 +318,10 @@ func TestConfig(t *testing.T) {
 - Slices of all above types: `[]string`, `[]int`, etc.
 
 ### Custom Types
+
 Any type can be supported by implementing a custom marshaller function or interface.
 
 ## API Reference
-
-### Core Functions
-
-```go
-// Parse with error handling
-func FromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) (T, error)
-
-// Parse with panic on error  
-func MustFromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, opts ...EnvParseOption) T
-```
 
 ### Custom Marshaller Interface
 

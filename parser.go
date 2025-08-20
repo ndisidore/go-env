@@ -45,7 +45,7 @@ func FromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, o
 			parseOpts.customMarshallers[k] = v
 		}
 	}
-	
+
 	for _, opt := range opts {
 		if err := opt(&parseOpts); err != nil {
 			return dest, fmt.Errorf("option error: %w", err)
@@ -60,7 +60,7 @@ func FromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, o
 	var (
 		v any
 	)
-	
+
 	// Check for custom marshaller first
 	destType := reflect.TypeOf(dest)
 	if marshaller, exists := parseOpts.customMarshallers[destType]; exists {
@@ -74,129 +74,129 @@ func FromEnvOrDefault[T any](ctx context.Context, envVar string, defaultVal T, o
 	} else {
 		// Fall back to built-in type handling
 		switch any(dest).(type) {
-	case string:
-		v = envStr
-	case bool:
-		v, err = strconv.ParseBool(envStr)
-	case int:
-		v, err = strconv.Atoi(envStr)
-	case uint:
-		var i uint64
-		i, err = strconv.ParseUint(envStr, 10, 64)
-		v = uint(i)
-	case int64:
-		v, err = strconv.ParseInt(envStr, 10, 64)
-	case uint64:
-		v, err = strconv.ParseUint(envStr, 10, 64)
-	case float64:
-		v, err = strconv.ParseFloat(envStr, 64)
-	case time.Duration:
-		v, err = time.ParseDuration(envStr)
-	case time.Time:
-		v, err = time.Parse(parseOpts.timeLayout, envStr)
-	case url.URL:
-		v, err = url.Parse(envStr)
-	case []string:
-		v = strings.Split(envStr, parseOpts.separator)
-	case []bool:
-		vs := make([]bool, 0)
-		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseBool(at)
-			if innerErr != nil {
-				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
-				break
+		case string:
+			v = envStr
+		case bool:
+			v, err = strconv.ParseBool(envStr)
+		case int:
+			v, err = strconv.Atoi(envStr)
+		case uint:
+			var i uint64
+			i, err = strconv.ParseUint(envStr, 10, 64)
+			v = uint(i)
+		case int64:
+			v, err = strconv.ParseInt(envStr, 10, 64)
+		case uint64:
+			v, err = strconv.ParseUint(envStr, 10, 64)
+		case float64:
+			v, err = strconv.ParseFloat(envStr, 64)
+		case time.Duration:
+			v, err = time.ParseDuration(envStr)
+		case time.Time:
+			v, err = time.Parse(parseOpts.timeLayout, envStr)
+		case url.URL:
+			v, err = url.Parse(envStr)
+		case []string:
+			v = strings.Split(envStr, parseOpts.separator)
+		case []bool:
+			vs := make([]bool, 0)
+			for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+				parsed, innerErr := strconv.ParseBool(at)
+				if innerErr != nil {
+					err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+					break
+				}
+				vs = append(vs, parsed)
 			}
-			vs = append(vs, parsed)
-		}
-		v = vs
-	case []int:
-		vs := make([]int, 0)
-		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.Atoi(at)
-			if innerErr != nil {
-				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
-				break
+			v = vs
+		case []int:
+			vs := make([]int, 0)
+			for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+				parsed, innerErr := strconv.Atoi(at)
+				if innerErr != nil {
+					err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+					break
+				}
+				vs = append(vs, parsed)
 			}
-			vs = append(vs, parsed)
-		}
-		v = vs
-	case []uint:
-		vs := make([]uint, 0)
-		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseUint(at, 10, 64)
-			if innerErr != nil {
-				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
-				break
+			v = vs
+		case []uint:
+			vs := make([]uint, 0)
+			for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+				parsed, innerErr := strconv.ParseUint(at, 10, 64)
+				if innerErr != nil {
+					err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+					break
+				}
+				vs = append(vs, uint(parsed))
 			}
-			vs = append(vs, uint(parsed))
-		}
-		v = vs
-	case []int64:
-		vs := make([]int64, 0)
-		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseInt(at, 10, 64)
-			if innerErr != nil {
-				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
-				break
+			v = vs
+		case []int64:
+			vs := make([]int64, 0)
+			for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+				parsed, innerErr := strconv.ParseInt(at, 10, 64)
+				if innerErr != nil {
+					err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+					break
+				}
+				vs = append(vs, parsed)
 			}
-			vs = append(vs, parsed)
-		}
-		v = vs
-	case []uint64:
-		vs := make([]uint64, 0)
-		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseUint(at, 10, 64)
-			if innerErr != nil {
-				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
-				break
+			v = vs
+		case []uint64:
+			vs := make([]uint64, 0)
+			for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+				parsed, innerErr := strconv.ParseUint(at, 10, 64)
+				if innerErr != nil {
+					err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+					break
+				}
+				vs = append(vs, parsed)
 			}
-			vs = append(vs, parsed)
-		}
-		v = vs
-	case []float64:
-		vs := make([]float64, 0)
-		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
-			parsed, innerErr := strconv.ParseFloat(at, 64)
-			if innerErr != nil {
-				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
-				break
+			v = vs
+		case []float64:
+			vs := make([]float64, 0)
+			for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+				parsed, innerErr := strconv.ParseFloat(at, 64)
+				if innerErr != nil {
+					err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+					break
+				}
+				vs = append(vs, parsed)
 			}
-			vs = append(vs, parsed)
-		}
-		v = vs
-	case []time.Duration:
-		vs := make([]time.Duration, 0)
-		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
-			parsed, innerErr := time.ParseDuration(at)
-			if innerErr != nil {
-				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
-				break
+			v = vs
+		case []time.Duration:
+			vs := make([]time.Duration, 0)
+			for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+				parsed, innerErr := time.ParseDuration(at)
+				if innerErr != nil {
+					err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+					break
+				}
+				vs = append(vs, parsed)
 			}
-			vs = append(vs, parsed)
-		}
-		v = vs
-	case []time.Time:
-		vs := make([]time.Time, 0)
-		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
-			parsed, innerErr := time.Parse(parseOpts.timeLayout, at)
-			if innerErr != nil {
-				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
-				break
+			v = vs
+		case []time.Time:
+			vs := make([]time.Time, 0)
+			for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+				parsed, innerErr := time.Parse(parseOpts.timeLayout, at)
+				if innerErr != nil {
+					err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+					break
+				}
+				vs = append(vs, parsed)
 			}
-			vs = append(vs, parsed)
-		}
-		v = vs
-	case []url.URL:
-		vs := make([]url.URL, 0)
-		for i, at := range splitAndTrim(envStr, parseOpts.separator) {
-			parsed, innerErr := url.Parse(at)
-			if innerErr != nil {
-				err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
-				break
+			v = vs
+		case []url.URL:
+			vs := make([]url.URL, 0)
+			for i, at := range splitAndTrim(envStr, parseOpts.separator) {
+				parsed, innerErr := url.Parse(at)
+				if innerErr != nil {
+					err = fmt.Errorf("item %s (pos: %d) failed to parse: %w", at, i, innerErr)
+					break
+				}
+				vs = append(vs, *parsed)
 			}
-			vs = append(vs, *parsed)
-		}
-		v = vs
+			v = vs
 		default:
 			// If no built-in type matches and no custom marshaller, return error
 			return dest, fmt.Errorf("unsupported type %T for env var %s", dest, envVar)
